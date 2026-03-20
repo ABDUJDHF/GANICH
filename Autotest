@@ -1,39 +1,260 @@
---// ============================================
---// Gani Hub v2 - Fixed Version
---// ============================================
+--// Gani Hub v2 - Working Version
+local SCRIPT_URL = "https://raw.githubusercontent.com/ABDUJDHF/GANICH/refs/heads/main/Autotest"
+
+--// Auto-Inject System
+if queue_on_teleport then
+    queue_on_teleport([[
+        task.wait(2)
+        pcall(function()
+            loadstring(game:HttpGet("]] .. SCRIPT_URL .. [["))()
+        end)
+    ]])
+end
 
 local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+
+--// انتظار 2 ثانية بدل التحقق من التحميل
+task.wait(2)
+
+--// Team Check (Marines/Pirates only)
+local function checkTeam()
+    if not player.Team then return false end
+    local name = player.Team.Name:lower()
+    return name:find("marine") or name:find("pirate")
+end
+
+--// Auto-select Marines if no team
+if not checkTeam() then
+    local VIM = game:GetService("VirtualInputManager")
+    for i = 1, 30 do
+        if checkTeam() then break end
+        VIM:SendMouseButtonEvent(512, 202, 0, true, game, 1)
+        task.wait(0.1)
+        VIM:SendMouseButtonEvent(512, 202, 0, false, game, 1)
+        task.wait(0.5)
+    end
+end
+
+if not checkTeam() then
+    warn("Select Marines or Pirates first!")
+    return
+end
+
+--// Load Rayfield
+local success, Rayfield = pcall(function()
+    return loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
+end)
+
+if not success or not Rayfield then
+    warn("Failed to load Rayfield!")
+    return
+end
+
+--// Services
 local TeleportService = game:GetService("TeleportService")
 local HttpService = game:GetService("HttpService")
-local CoreGui = game:GetService("CoreGui")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 local Lighting = game:GetService("Lighting")
-local player = Players.LocalPlayer
+local CoreGui = game:GetService("CoreGui")
 
---// Auto-Inject System
-local SCRIPT_URL = "https://raw.githubusercontent.com/ABDUJDHF/GANICH/refs/heads/main/Autotest"
-local function setupAutoInject()
+--// Settings
+local Settings = {
+    AutoFarm = false,
+    StopRare = true,
+    ServerHop = false,
+    BoatSpeed = 0,
+    NoClip = false,
+    FarmMode = "Fast"
+}
+
+--// UI
+local Window = Rayfield:CreateWindow({
+    Name = "Gani Hub v2",
+    LoadingTitle = "Loading...",
+    LoadingSubtitle = "By GANI",
+    ConfigurationSaving = {Enabled = false},
+    KeySystem = false
+})
+
+local SeaTab = Window:CreateTab("Sea", 4483362458)
+local FarmTab = Window:CreateTab("Chest", 4483362458)
+local InfoTab = Window:CreateTab("Info", 4483362458)
+
+--// Variables
+local isFarming = false
+local farmStartTime = 0
+
+--// Boat Speed (Max 500)
+SeaTab:CreateSlider({
+    Name = "Boat Speed",
+    Range = {0, 500},
+    Increment = 1,
+    Suffix = "Studs/s",
+    CurrentValue = 0,
+    Callback = function(val)
+        Settings.BoatSpeed = val
+        local boats = workspace:FindFirstChild("Boats")
+        if boats then
+            for _, boat in pairs(boats:GetChildren()) do
+                local seat = boat:FindFirstChild("VehicleSeat")
+                if seat then seat.MaxSpeed = val end
+            end
+        end
+    end
+})
+
+--// Chest Farm Functions
+local function getChests()
+    local chests = {}
+    local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return chests end
+    
+    for _, obj in pairs(workspace:GetDescendants()) do
+        if obj:IsA("BasePart") and (obj.Name == "Chest1" or obj.Name == "Chest2" or obj.Name == "Chest3") then
+            if obj:FindFirstChild("TouchInterest") then
+                table.insert(chests, {obj = obj, dist = (obj.Position - hrp.Position).Magnitude})
+            end
+        end
+    end
+    
+    table.sort(chests, function(a, b) return a.dist < b.dist end)
+    return chests
+end
+
+local function checkRare()
+    local bp = player:FindFirstChild("Backpack")
+    local char = player.Character
+    if bp then
+        for _, item in pairs(bp:GetChildren()) do
+            local n = item.Name
+            if n == "God's Chalice" or n:sub(1, 8) == "Fist of " then return true, n end
+        end
+    end
+    if char then
+        for _, item in pairs(char:GetChildren()) do
+            if item:IsA("Tool") then
+                local n = item.Name
+                if n == "God's Chalice" or n:sub(1, 8) == "Fist of " then return true, n end
+            end
+        end
+    end
+    return false
+end
+
+local function hopServer()
+    --// Re-enable auto-inject before hopping
     if queue_on_teleport then
         queue_on_teleport([[
-            repeat task.wait() until game:IsLoaded()
-            task.wait(1)
+            task.wait(2)
             pcall(function()
                 loadstring(game:HttpGet("]] .. SCRIPT_URL .. [["))()
             end)
         ]])
     end
+    
+    pcall(function()
+        local url = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
+        local data = HttpService:JSONDecode(game:HttpGet(url))
+        local servers = {}
+        for _, s in ipairs(data.data) do
+            if s.id ~= game.JobId and s.playing < s.maxPlayers then
+                table.insert(servers, s.id)
+            end
+        end
+        if #servers > 0 then
+            TeleportService:TeleportToPlaceInstance(game.PlaceId, servers[math.random(1, #servers)], player)
+        end
+    end)
 end
-setupAutoInject()
 
---// Team Check
-local function isValidTeam()
-    if not player.Team then return false end
-    local t = player.Team.Name:lower()
-    return t == "marines" or t == "marine" or t == "pirates" or t == "pirate"
+--// Farm Loop
+local function startFarming()
+    isFarming = true
+    farmStartTime = tick()
+    local delay = Settings.FarmMode == "Fast" and 0.1 or 0.5
+    
+    Rayfield:Notify({Title = "Farm Started", Content = Settings.FarmMode .. " Mode", Duration = 3})
+    
+    while isFarming do
+        if Settings.StopRare then
+            local found, item = checkRare()
+            if found then
+                isFarming = false
+                Rayfield:Notify({Title = "Found: " .. item, Content = "Stopping farm!", Duration = 10})
+                break
+            end
+        end
+        
+        if Settings.ServerHop and (tick() - farmStartTime >= 120) then
+            Rayfield:Notify({Title = "Hopping Server", Content = "Finding new server...", Duration = 3})
+            hopServer()
+            return
+        end
+        
+        local chests = getChests()
+        for _, c in ipairs(chests) do
+            if not isFarming then break end
+            if c.obj:FindFirstChild("TouchInterest") then
+                local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+                if hrp then
+                    hrp.CFrame = CFrame.new(c.obj.Position + Vector3.new(0, 4, 0))
+                    task.wait(delay)
+                end
+            end
+        end
+        
+        task.wait(delay)
+    end
 end
+
+--// Farm UI
+FarmTab:CreateToggle({
+    Name = "Auto Farm Chests",
+    CurrentValue = false,
+    Callback = function(v)
+        Settings.AutoFarm = v
+        if v then
+            task.spawn(startFarming)
+        else
+            isFarming = false
+        end
+    end
+})
+
+FarmTab:CreateDropdown({
+    Name = "Farm Speed",
+    Options = {"Fast", "Normal"},
+    CurrentOption = "Fast",
+    Callback = function(v) Settings.FarmMode = v end
+})
+
+FarmTab:CreateToggle({
+    Name = "Stop on Rare Items",
+    CurrentValue = true,
+    Callback = function(v) Settings.StopRare = v end
+})
+
+FarmTab:CreateToggle({
+    Name = "Auto Server Hop (120s)",
+    CurrentValue = false,
+    Callback = function(v) Settings.ServerHop = v end
+})
+
+--// Info
+InfoTab:CreateParagraph({
+    Title = "Gani Hub v2",
+    Content = "Team: " .. (player.Team and player.Team.Name or "None") .. "\nMax Boat Speed: 500\nAuto-inject: Enabled"
+})
+
+Rayfield:Notify({
+    Title = "Gani Hub v2 Loaded",
+    Content = "Ready to use!",
+    Duration = 3
+})
 
 local function getTeamName()
     return player.Team and player.Team.Name or "None"
