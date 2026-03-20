@@ -3,7 +3,7 @@
 if queue_on_teleport then
     queue_on_teleport([[
         task.wait(2)
-        loadstring(game:HttpGet("https://raw.githubusercontent.com/ABDUJDHF/SEAHELPERV1/refs/heads/main/Script"))()
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/ABDUJDHF/SEAHELPERV1/refs/heads/main/Scriptold"))()
     ]])
 end
 
@@ -11,5 +11,5 @@ end
 task.wait(2)
 
 --// 3. نشتغل السكربت الرئيسي
-loadstring(game:HttpGet("https://raw.githubusercontent.com/ABDUJDHF/SEAHELPERV1/refs/heads/main/Script"))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/ABDUJDHF/SEAHELPERV1/refs/heads/main/Scriptold"))()
 
