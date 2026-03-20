@@ -1,5 +1,3 @@
---// هذا الملف تحطه في GitHub و تشغله بالـ loadstring
---// رابطه: https://raw.githubusercontent.com/ABDUJDHF/GANICH/refs/heads/main/loader.lua
 
 --// 1. أول شي نفعل الـ auto-inject للمرة الجاية
 if queue_on_teleport then
@@ -13,5 +11,5 @@ end
 task.wait(2)
 
 --// 3. نشتغل السكربت الرئيسي
-loadstring(game:HttpGet("https://raw.githubusercontent.com/ABDUJDHF/GANICH/refs/heads/main/script"))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/ABDUJDHF/SEAHELPERV1/refs/heads/main/Script"))()
 
