@@ -5,7 +5,7 @@
 if queue_on_teleport then
     queue_on_teleport([[
         task.wait(2)
-        loadstring(game:HttpGet("https://raw.githubusercontent.com/ABDUJDHF/GANICH/refs/heads/main/loader.lua"))()
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/ABDUJDHF/SEAHELPERV1/refs/heads/main/Script"))()
     ]])
 end
 
