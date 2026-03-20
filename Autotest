@@ -1,6 +1,5 @@
 --// ============================================
---// Gani Hub - Blox Fruits Ultimate Script
---// by gani discord:d.6a
+--// Gani Hub v2 - Fixed Version
 --// ============================================
 
 local Players = game:GetService("Players")
@@ -14,14 +13,8 @@ local RunService = game:GetService("RunService")
 local Lighting = game:GetService("Lighting")
 local player = Players.LocalPlayer
 
---// ============================================
---// AUTO-INJECT AFTER TELEPORT/REJOIN (مثل Infinite Yield)
---// ============================================
-
---// الرابط الخاص بسكربتك
+--// Auto-Inject System
 local SCRIPT_URL = "https://raw.githubusercontent.com/ABDUJDHF/GANICH/refs/heads/main/Autotest"
-
---// دالة لحقن السكربت تلقائياً بعد الانتقال
 local function setupAutoInject()
     if queue_on_teleport then
         queue_on_teleport([[
@@ -33,7 +26,365 @@ local function setupAutoInject()
         ]])
     end
 end
+setupAutoInject()
 
+--// Team Check
+local function isValidTeam()
+    if not player.Team then return false end
+    local t = player.Team.Name:lower()
+    return t == "marines" or t == "marine" or t == "pirates" or t == "pirate"
+end
+
+local function getTeamName()
+    return player.Team and player.Team.Name or "None"
+end
+
+if not isValidTeam() then
+    task.wait(2)
+    for i = 1, 20 do
+        if isValidTeam() then break end
+        VirtualInputManager:SendMouseButtonEvent(512, 202, 0, true, game, 1)
+        task.wait(0.1)
+        VirtualInputManager:SendMouseButtonEvent(512, 202, 0, false, game, 1)
+        task.wait(0.5)
+    end
+    if not isValidTeam() then
+        warn("Must be in Pirates or Marines team!")
+        return
+    end
+end
+
+--// Load Rayfield
+local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
+
+--// Settings
+local CONFIG_FOLDER = "GaniHubV2"
+local CONFIG_FILE = CONFIG_FOLDER .. "/settings.json"
+local Settings = {
+    AutoCollect = false,
+    StopIfRareItems = true,
+    ServerHop = false,
+    BoatSpeed = 0,
+    AutoNoClip = false,
+    AutoSail = false,
+    FarmMode = "Fast"
+}
+
+pcall(function()
+    if isfile(CONFIG_FILE) then
+        local data = HttpService:JSONDecode(readfile(CONFIG_FILE))
+        for k, v in pairs(data) do Settings[k] = v end
+    else
+        makefolder(CONFIG_FOLDER)
+    end
+end)
+
+local function SaveSettings()
+    pcall(function()
+        writefile(CONFIG_FILE, HttpService:JSONEncode(Settings))
+    end)
+end
+
+--// UI Setup
+local Window = Rayfield:CreateWindow({
+    Name = "Gani Hub v2",
+    LoadingTitle = "Loading...",
+    LoadingSubtitle = "By GANI",
+    ConfigurationSaving = {Enabled = false},
+    KeySystem = false
+})
+
+local SeaTab = Window:CreateTab("Sea", 4483362458)
+local ChestTab = Window:CreateTab("Chest", 4483362458)
+local ESPTab = Window:CreateTab("ESP", 4483362458)
+local InfoTab = Window:CreateTab("Info", 4483362458)
+
+--// Variables
+local currentBoatSpeed = Settings.BoatSpeed
+local autoNoClipEnabled = Settings.AutoNoClip
+local autoSailEnabled = false
+local autoSailThread = nil
+local currentTargetBoat = nil
+local isRunning = false
+local isRespawning = false
+local serverHopStartTime = 0
+local lastRespawnTime = 0
+local notifiedRareItem = false
+
+--// Sea Functions
+local function applyBoatSpeed(speed)
+    currentBoatSpeed = speed
+    Settings.BoatSpeed = speed
+    SaveSettings()
+    local Boats = workspace:FindFirstChild("Boats")
+    if Boats then
+        for _, boat in pairs(Boats:GetChildren()) do
+            local seat = boat:FindFirstChild("VehicleSeat")
+            if seat then seat.MaxSpeed = speed end
+        end
+    end
+end
+
+local function applyNoClipToBoats(enable)
+    local Boats = workspace:FindFirstChild("Boats")
+    if not Boats then return end
+    for _, boat in pairs(Boats:GetChildren()) do
+        for _, part in pairs(boat:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = not enable
+            end
+        end
+    end
+end
+
+task.spawn(function()
+    while task.wait(1) do
+        if currentBoatSpeed > 0 then applyBoatSpeed(currentBoatSpeed) end
+        if autoNoClipEnabled then applyNoClipToBoats(true) end
+    end
+end)
+
+--// Sea UI
+SeaTab:CreateSlider({
+    Name = "Boat Speed",
+    Range = {0, 500},
+    Increment = 1,
+    Suffix = "Studs/s",
+    CurrentValue = currentBoatSpeed,
+    Callback = function(v) applyBoatSpeed(v) end
+})
+
+SeaTab:CreateInput({
+    Name = "Speed (0-500)",
+    PlaceholderText = "300",
+    RemoveTextAfterFocusLost = false,
+    Callback = function(t)
+        local s = tonumber(t)
+        if s and s >= 0 and s <= 500 then
+            applyBoatSpeed(s)
+        end
+    end
+})
+
+SeaTab:CreateToggle({
+    Name = "Auto No Clip Boat",
+    CurrentValue = autoNoClipEnabled,
+    Callback = function(v)
+        autoNoClipEnabled = v
+        Settings.AutoNoClip = v
+        SaveSettings()
+        applyNoClipToBoats(v)
+    end
+})
+
+--// Chest Functions
+local function GetHRP()
+    local char = player.Character
+    if not char then
+        char = player.CharacterAdded:Wait()
+    end
+    return char:WaitForChild("HumanoidRootPart", 5)
+end
+
+local function CheckRareItems()
+    local backpack = player:FindFirstChild("Backpack")
+    local character = player.Character
+    
+    if backpack then
+        for _, item in pairs(backpack:GetChildren()) do
+            local name = item.Name
+            if name == "God's Chalice" or name:sub(1, 8) == "Fist of " then
+                return true, name
+            end
+        end
+    end
+    
+    if character then
+        for _, item in pairs(character:GetChildren()) do
+            if item:IsA("Tool") then
+                local name = item.Name
+                if name == "God's Chalice" or name:sub(1, 8) == "Fist of " then
+                    return true, name
+                end
+            end
+        end
+    end
+    return false, nil
+end
+
+local function GetChests()
+    local chests = {}
+    local hrp = GetHRP()
+    if not hrp then return chests end
+    local pos = hrp.Position
+    
+    for _, service in pairs(game:GetChildren()) do
+        pcall(function()
+            for _, obj in pairs(service:GetDescendants()) do
+                if obj:IsA("BasePart") and (obj.Name == "Chest1" or obj.Name == "Chest2" or obj.Name == "Chest3") then
+                    if obj:FindFirstChild("TouchInterest") then
+                        table.insert(chests, {
+                            Object = obj,
+                            Distance = (obj.Position - pos).Magnitude
+                        })
+                    end
+                end
+            end
+        end)
+    end
+    
+    table.sort(chests, function(a, b) return a.Distance < b.Distance end)
+    return chests
+end
+
+local function TPChest(chest)
+    local hrp = GetHRP()
+    if not hrp or not chest or not chest.Parent then return false end
+    hrp.CFrame = CFrame.new(chest.Position + Vector3.new(0, 4, 0))
+    return true
+end
+
+local function HopServer()
+    setupAutoInject()
+    pcall(function()
+        local url = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
+        local data = HttpService:JSONDecode(game:HttpGet(url))
+        local servers = {}
+        for _, s in ipairs(data.data) do
+            do
+            if s.id ~= game.JobId and s.playing < s.maxPlayers then
+                table.insert(servers, s.id)
+            end
+        end
+        if #servers > 0 then
+            TeleportService:TeleportToPlaceInstance(game.PlaceId, servers[math.random(1, #servers)], player)
+        else
+            TeleportService:Teleport(game.PlaceId, player)
+        end
+    end)
+end
+
+--// Chest Farm Loop
+local function CollectionLoop()
+    notifiedRareItem = false
+    serverHopStartTime = tick()
+    lastRespawnTime = tick()
+    local delay = Settings.FarmMode == "Fast" and 0.1 or 0.5
+    
+    Rayfield:Notify({
+        Title = "Started",
+        Content = Settings.FarmMode .. " Mode",
+        Duration = 3
+    })
+    
+    while isRunning do
+        if Settings.StopIfRareItems and not notifiedRareItem then
+            local found, item = CheckRareItems()
+            if found then
+                notifiedRareItem = true
+                isRunning = false
+                Settings.AutoCollect = false
+                SaveSettings()
+                Rayfield:Notify({
+                    Title = "Rare Item Found!",
+                    Content = item,
+                    Duration = 10
+                })
+                break
+            end
+        end
+        
+        if Settings.ServerHop and (tick() - serverHopStartTime >= 120) then
+            Rayfield:Notify({Title = "Server Hopping", Content = "Finding new server...", Duration = 3})
+            HopServer()
+            return
+        end
+        
+        local chests = GetChests()
+        for _, data in ipairs(chests) do
+            if not isRunning then break end
+            
+            if Settings.StopIfRareItems then
+                local found, item = CheckRareItems()
+                if found then
+                    isRunning = false
+                    Settings.AutoCollect = false
+                    SaveSettings()
+                    Rayfield:Notify({Title = "Found: " .. item, Content = "Stopping...", Duration = 10})
+                    return
+                end
+            end
+            
+            if data.Object:FindFirstChild("TouchInterest") then
+                TPChest(data.Object)
+                task.wait(delay)
+            end
+        end
+        
+        task.wait(delay)
+    end
+end
+
+--// Chest UI
+ChestTab:CreateToggle({
+    Name = "Auto Farm Chests",
+    CurrentValue = Settings.AutoCollect,
+    Callback = function(v)
+        isRunning = v
+        Settings.AutoCollect = v
+        SaveSettings()
+        if v then
+            task.spawn(CollectionLoop)
+        end
+    end
+})
+
+ChestTab:CreateDropdown({
+    Name = "Farm Mode",
+    Options = {"Fast", "Normal"},
+    CurrentOption = Settings.FarmMode,
+    Callback = function(v)
+        Settings.FarmMode = v
+        SaveSettings()
+    end
+})
+
+ChestTab:CreateToggle({
+    Name = "Stop on Rare Items",
+    CurrentValue = Settings.StopIfRareItems,
+    Callback = function(v)
+        Settings.StopIfRareItems = v
+        SaveSettings()
+    end
+})
+
+ChestTab:CreateToggle({
+    Name = "Auto Server Hop (120s)",
+    CurrentValue = Settings.ServerHop,
+    Callback = function(v)
+        Settings.ServerHop = v
+        SaveSettings()
+    end
+})
+
+--// Info
+InfoTab:CreateParagraph({
+    Title = "Gani Hub",
+    Content = "Version: v2\nGame: Blox Fruits\nTeam: " .. getTeamName()
+})
+
+--// Auto-start if enabled
+if Settings.AutoCollect then
+    task.wait(3)
+    isRunning = true
+    task.spawn(CollectionLoop)
+end
+
+Rayfield:Notify({
+    Title = "Gani Hub v2 Loaded",
+    Content = "Team: " .. getTeamName(),
+    Duration = 3
+})
 --// تفعيل الـ auto-inject فوراً
 setupAutoInject()
 
