@@ -6,7 +6,7 @@ if queue_on_teleport then
     ]])
 end
 
-task.wait(2)
+task.wait(1)
 
 
 loadstring(game:HttpGet("https://raw.githubusercontent.com/ABDUJDHF/SEAHELPERV1/refs/heads/main/Script"))()
