@@ -1,15 +1,18 @@
+--// ============================================
+--// Gani Hub Loader - Blox Fruits
+--// رابط: https://raw.githubusercontent.com/ABDUJDHF/GANICH/refs/heads/main/Autotest
+--// ============================================
 
---// 1. أول شي نفعل الـ auto-inject للمرة الجاية
+--// 1. Auto-inject للمرة الجاية (مهم جداً للـ Server Hop)
 if queue_on_teleport then
     queue_on_teleport([[
-        task.wait(2)
-        loadstring(game:HttpGet("https://raw.githubusercontent.com/ABDUJDHF/SEAHELPERV1/refs/heads/main/Scriptold"))()
+        task.wait(3)
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/ABDUJDHF/GANICH/refs/heads/main/Autotest"))()
     ]])
 end
 
---// 2. نستنى شوي
+--// 2. استنى شوي
 task.wait(2)
 
---// 3. نشتغل السكربت الرئيسي
-loadstring(game:HttpGet("https://raw.githubusercontent.com/ABDUJDHF/SEAHELPERV1/refs/heads/main/Scriptold"))()
-
+--// 3. شغل السكربت الرئيسي
+loadstring(game:HttpGet("https://raw.githubusercontent.com/ABDUJDHF/SEAHELPERV1/refs/heads/main/Script"))()
